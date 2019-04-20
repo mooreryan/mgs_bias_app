@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <!-- this refers to resources/public/css/style.css -->
+  <link href="css/style.css" rel="stylesheet" type="text/css">
+</head>
+
+<body>
+  <h1>The mgs-bias App</h1>
+  <p>Hi! I'm the template for your main html page! Find me in ./mgs-bias/resources/public/index.html</p>
+
+  <div id="silly-thing"></div>
+
+
+  <div id="app">
+    <h2>Bias affects observed composition</h2>
+
+    <div>
+      <label for="mgs-bias-num-otus">Number of OTUs</label>
+      <input id="mgs-bias-num-otus" type="range" min="3" max="10" value="3">
+    </div>
+
+    <div id="mgs-bias-protocol-steps"></div>
+
+    <!-- <table id="mgs-bias-protocol-steps"> -->
+    <!--   <tr> -->
+    <!--     <th>Actual count</th> -->
+    <!--     <th>Actual composition</th> -->
+    <!--     <th>Extraction bias</th> -->
+    <!--     <th>PCR bias</th> -->
+    <!--     <th>Sequencing bias</th> -->
+    <!--     <th>Bioinformatics bias</th> -->
+    <!--     <th>Total bias</th> -->
+    <!--     <th>Observed count</th> -->
+    <!--     <th>Observed composition</th> -->
+    <!--   </tr> -->
+    <!--   <tr> -->
+    <!--     <td>1</td> -->
+    <!--     <td>0.33</td> -->
+    <!--     <td>1</td> -->
+    <!--     <td>1</td> -->
+    <!--     <td>1</td> -->
+    <!--     <td>1</td> -->
+    <!--     <td>1</td> -->
+    <!--     <td>1</td> -->
+    <!--     <td>0.04</td> -->
+    <!--   </tr> -->
+    <!--   <tr> -->
+    <!--     <td>1</td> -->
+    <!--     <td>0.33</td> -->
+    <!--     <td>4</td> -->
+    <!--     <td>6</td> -->
+    <!--     <td>0.5</td> -->
+    <!--     <td>1.5</td> -->
+    <!--     <td>18</td> -->
+    <!--     <td>18</td> -->
+    <!--     <td>0.72</td> -->
+    <!--   </tr> -->
+    <!--   <tr> -->
+    <!--     <td>1</td> -->
+    <!--     <td>0.33</td> -->
+    <!--     <td>15</td> -->
+    <!--     <td>2</td> -->
+    <!--     <td>0.25</td> -->
+    <!--     <td>0.8</td> -->
+    <!--     <td>6</td> -->
+    <!--     <td>6</td> -->
+    <!--     <td>0.24</td> -->
+    <!--   </tr> -->
+    <!--   <tr> -->
+    <!--     <td colspan="2">A</td> -->
+    <!--     <td>B(P1)</td> -->
+    <!--     <td>B(P2)</td> -->
+    <!--     <td>B(P3)</td> -->
+    <!--     <td>B(P4)</td> -->
+    <!--     <td>B(P)</td> -->
+    <!--     <td colspan="2">O ~ A * B(P)</td> -->
+    <!--   </tr> -->
+    <!-- </table> -->
+  </div>
+  <!-- this refers to target/public/cljs-out/main.js -->
+  <script src="cljs-out/core-main.js"></script>
+  <!-- <script> -->
+  <!--   mgs_bias.core.run(); -->
+  <!-- </script> -->
+</body>
+
+</html>
