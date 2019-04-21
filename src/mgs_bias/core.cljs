@@ -20,98 +20,45 @@
 
 ;;;; Data
 
-(def mgs-bias-data
-  (r/atom {:otu-1
-           {:otu :otu-1
-            :actual-1 1
-            :actual-2 15
-            :observed-1 1
-            :observed-2 15
-            :extraction-bias 1
-            :pcr-bias 1
-            :sequencing-bias 1
-            :bioinformatics-bias 1}
-           :otu-2
-           {:otu :otu-2
-            :actual-1 1
-            :actual-2 1
-            :observed-1 18
-            :observed-2 18
-            :extraction-bias 4
-            :pcr-bias 6
-            :sequencing-bias 0.5
-            :bioinformatics-bias 1.5}
-           :otu-3
-           {:otu :otu-3
-            :actual-1 1
-            :actual-2 4
-            :observed-1 6
-            :observed-2 24
-            :extraction-bias 15
-            :pcr-bias 2
-            :sequencing-bias 0.25
-            :bioinformatics-bias 0.8}}))
+(def otus [:otu-1 :otu-2 :otu-3])
 
-;;;; Doing things to data
+(def protocol-steps [:extraction-bais
+                     :pcr-bias
+                     :sequencing-bias
+                     :bioinformatics-bais])
 
-(defn composition-charts [data]
-  (.log js/console (clj->js data))
-  ;; Make sure any existing svg has been removed
-  (-> js/d3
-      (.select (str "#" html-id-composition-charts-svg))
-      .remove)
-  ;; Append the svg
-  (let [svg (-> js/d3
-                (.select (str "#" html-id-composition-charts))
-                (.append "svg")
-                (.attr "id" html-id-composition-charts-svg)
-                (.attr "width" 500)
-                (.attr "height" 500))
-        actual-1 (map (fn [m]
-                        (js/parseFloat (:actual-1 m)))
-                      data)
-        actual-1-rel (map (fn [n]
-                            (/ n (reduce + actual-1)))
-                          actual-1)
-        rects (-> svg
-                  (.append "g")
-                  (.selectAll "rect")
-                  (.data (clj->js actual-1-rel)))
-        actual-2 (map (fn [m]
-                        (js/parseFloat (:actual-2 m)))
-                      data)
-        observed-1 (map (fn [m]
-                          (js/parseFloat (:observed-1 m)))
-                        data)
-        observed-2 (map (fn [m]
-                          (js/parseFloat (:observed-1 m)))
-                        data)]
+;; row i is OTU i, col j is sample j
+(def actual-otu-counts
+  (r/atom [[1 15]
+           [1 1]
+           [1 4]]))
 
-    (.log js/console (clj->js actual-1-rel))
-    (-> rects
-        .enter
-        (.append "rect")
-        (.merge rects)
-        (.attr "fill" (fn [d i] (get ["red" "green" "blue"] i)))
-        (.attr "width" 40)
-        (.attr "height" (fn [d] (* 400 d)))
-        (.attr "x" 10)
-        (.attr "y" (fn [d i] (.log js/console (* i (* 400 d))) (* i (* 400 d)))))
-    (-> rects
-        .exit
-        .remove)))
+(def observed-otu-counts
+  (r/atom nil))
 
-(def bias-table-columns 9)
+;; row i is OTU i, col j is protocol step j
+(def protocol-otu-bias-per-step
+  (r/atom [[1  1 1    1]
+           [4  6 0.5  1.5]
+           [15 2 0.25 0.8]]))
 
-(defn total-bias [otu-info]
-  (* (:extraction-bias otu-info)
-     (:pcr-bias otu-info)
-     (:sequencing-bias otu-info)
-     (:bioinformatics-bias otu-info)))
+(def protocol-otu-bias-total
+  (r/atom nil))
 
-(defn observed-count [otu-info]
-  (* (:actual-count otu-info)
-     (total-bias otu-info)))
+(defn total-bias
+  "Returns a vec with the total bias for each OTU."
+  [protocol-bias]
+  (vec (map #(reduce * %) protocol-bias)))
+
+(defn observed-counts
+  "Returns vec of vecs to match the input data format."
+  [actual-counts protocol-bias]
+  (vec (map (fn [[otu-bias per-sample-counts]]
+                (vec (map #(* otu-bias %) per-sample-counts)))
+              (zipmap (total-bias protocol-bias)
+                      actual-counts))))
+
+;;;; Utils
 
 (defn event-val [event]
   (-> event .-target .-value))
@@ -128,106 +75,97 @@
     [:th "Bioinformatics bias"]
     [:th "Total bias"]]])
 
-(defn table-input [table-data id key]
-  (let [change-fn (fn [event]
-                    (swap! table-data
-                           assoc-in
-                           [id key]
-                           (event-val event))
-                    (doall
-                     (let [bias (total-bias (id @table-data))]
-                       (for [i [1 2]]
-                         (swap! table-data
-                                assoc-in
-                                [id (keyword (str "observed-" i))]
-                                (* bias
-                                   (js/parseFloat (get-in @table-data
-                                                          [id (keyword (str "actual-" i))])))))))
-                    (.log js/console "mgs-bias-data" (clj->js @mgs-bias-data))
-                    (composition-charts (vals @mgs-bias-data)))]
-    [:input {:type "text"
-             :value (get-in @table-data [id key])
-             :on-change change-fn}]))
+(defn bias-table-body
+  "Assumes all OTUs have equal number of steps."
+  [otu-bias-per-step]
+  (let [num-otus (count @otu-bias-per-step)
+        num-steps (count (first @otu-bias-per-step))]
+    [:tbody
+     (doall
+      (for [otu-idx (range num-otus)]
+        ^{:key (str "otu-" otu-idx)}
+        [:tr
+         [:td (str "otu-" (inc otu-idx))]
+         (doall
+          (for [step-idx (range num-steps)]
+            ^{:key (str "step-" step-idx)}
+            [:td
+             [:input {:type "text"
+                      :value (get-in @otu-bias-per-step [otu-idx step-idx])
+                      :on-change #(swap! otu-bias-per-step
+                                         assoc-in
+                                         [otu-idx step-idx]
+                                         (event-val %))}]]))
+         [:td (reduce * (get @otu-bias-per-step otu-idx))]]))]))
 
-(defn mgs-bias-protocol-table [data]
+(defn bias-table [data]
   [:table
    [bias-table-header]
-   [:tbody
-    (doall
-     (for [otu-id (keys @data)]
-       ^{:key otu-id}
-       [:tr
-        [:td otu-id]
-        [:td [table-input data otu-id :extraction-bias]]
-        [:td [table-input data otu-id :pcr-bias]]
-        [:td [table-input data otu-id :sequencing-bias]]
-        [:td [table-input data otu-id :bioinformatics-bias]]
-        [:td (gstring/format "%.2f" (total-bias (otu-id @data)))]]))]])
+   [bias-table-body data]])
 
-(defn otu-table-actual [data]
+(defn count-table-header []
+  [:thead
+   [:tr
+    [:th "OTU ID"]
+    [:th "Sample 1"]
+    [:th "sample 2"]]])
+
+(defn count-table-body
+  [otu-counts]
+  (let [num-otus (count @otu-counts)
+        num-samples (count (first @otu-counts))]
+    [:tbody
+     (doall
+      (for [otu-idx (range num-otus)]
+        ^{:key (str "otu-" otu-idx)}
+        [:tr
+         [:td (str "otu-" (inc otu-idx))]
+         (doall
+          (for [sample-idx (range num-samples)]
+            ^{:key (str "sample-" sample-idx)}
+            [:td
+             [:input {:type "text"
+                      :value (get-in @otu-counts [otu-idx sample-idx])
+                      :on-change #(swap! otu-counts
+                                         assoc-in
+                                         [otu-idx sample-idx]
+                                         (event-val %))}]]))]))]))
+
+(defn count-table [data]
   [:table
-   [:thead
-    [:tr
-     [:th "OTU ID"]
-     [:th "Sample 1"]
-     [:th "sample 2"]]]
-   [:tbody
-    (doall
-     (for [otu-id (keys @data)]
-       ^{:key otu-id}
-       [:tr
-        [:td otu-id]
-        [:td [table-input data otu-id :actual-1]]
-        [:td [table-input data otu-id :actual-2]]]))]])
+   [count-table-header]
+   [count-table-body data]])
 
-(defn otu-table-observed [data]
+(defn actual-count-table-body
+  "Assumes the data is all in the proper shape."
+  [otu-counts otu-bias-per-step]
+  (let [num-otus (count @otu-counts)
+        num-samples (count (first @otu-counts))
+        bias (total-bias @otu-bias-per-step)]
+    [:tbody
+     (doall
+      (for [otu-idx (range num-otus)]
+        ^{:key (str "otu-" otu-idx)}
+        [:tr
+         [:td (str "otu-" (inc otu-idx))]
+         (doall
+          (for [sample-idx (range num-samples)]
+            (let [count (get-in @otu-counts [otu-idx sample-idx])]
+              ^{:key (str "sample-" sample-idx)}
+              [:td (* count (get bias otu-idx))])))]))]))
+
+(defn actual-count-table [otu-counts otu-bias-per-step]
   [:table
-   [:thead
-    [:tr
-     [:th "OTU ID"]
-     [:th "Sample 1"]
-     [:th "sample 2"]]]
-   [:tbody
-    (doall
-     (for [otu-id (keys @data)]
-       ^{:key otu-id}
-       [:tr
-        [:td otu-id]
-        [:td (:observed-1 (otu-id @data))]
-        [:td (:observed-2 (otu-id @data))]]))]])
+   [count-table-header]
+   [actual-count-table-body otu-counts otu-bias-per-step]])
 
-;;;; Rendering functions
+;;;; Rendering
 
-(defn render-mgs-bias-protocol-table [html-id data]
-  (r/render [mgs-bias-protocol-table data]
-            (.getElementById js/document html-id)))
+(r/render [bias-table protocol-otu-bias-per-step]
+          (.getElementById js/document html-id-bias-table))
 
-(defn render-otu-table-actual [html-id data]
-  (r/render [otu-table-actual data]
-            (.getElementById js/document html-id)))
+(r/render [count-table actual-otu-counts]
+          (.getElementById js/document html-id-otu-table-actual-counts))
 
-(defn render-otu-table-observed [html-id data]
-  (r/render [otu-table-observed data]
-            (.getElementById js/document html-id)))
-
-
-
-(render-mgs-bias-protocol-table html-id-bias-table mgs-bias-data)
-(render-otu-table-actual html-id-otu-table-actual-counts mgs-bias-data)
-(render-otu-table-observed html-id-otu-table-observed-counts mgs-bias-data)
-
-(composition-charts (vals @mgs-bias-data))
-
-
-
-;;;; scratch
-
-(defn stack [keys]
-  (-> js/d3
-      .stack
-      (.keys (clj->js keys))
-      (.order js/d3.stackOrderNone)
-      (.offset js/d3.stackOffsetNone)))
-
-((stack [:actual-1 :observed-1 :actual-2 :observed-2])
- (clj->js (vals @mgs-bias-data)))
+(r/render [actual-count-table actual-otu-counts protocol-otu-bias-per-step]
+          (.getElementById js/document html-id-otu-table-observed-counts))
