@@ -136,19 +136,70 @@
   "Make a relative abundance bar for a single sample."
   [sample-idx rect-coords]
   (let [start-xy (get rabund-bar-xy-start sample-idx {:x 0 :y 0})]
-    (map-indexed (fn [i coords]
-                   (let [x (:x start-xy)
-                         ;; offset the y value by the default y start
-                         y (+ (:start coords) (:y start-xy))
-                         width rabund-bar-width
-                         height (:height coords)]
-                     ^{:key (str i "-" x "-" y)}
-                     [:rect {:x x :y y
-                             :width width :height height
-                             :fill (otu-colors i)}]))
-                 rect-coords)))
+    [:g
+     (map-indexed (fn [i coords]
+                    (let [x (:x start-xy)
+                          ;; offset the y value by the default y start
+                          y (+ (:start coords) (:y start-xy))
+                          width rabund-bar-width
+                          height (:height coords)]
+                      ^{:key (str i "-" x "-" y)}
+                      [:rect {:x x :y y
+                              :width width :height height
+                              :fill (otu-colors i)}]))
+                  rect-coords)]))
 
 ;;;; Components
+
+(defn sample-1-labels []
+  ;; sample 1 label
+  [:g
+   [:text {:transform "matrix(1, 0, 0, 1, 168, 490.75)"}
+    [:tspan {:x -79.04 :y 12.5
+             :font-size 36 :font-family "Helvetica-Bold"}
+     "Sample 1"]]
+   [:g
+    ;; sample 1 actual abundance label
+    [:text {:transform "matrix(1, 0, 0, 1, 108, 437.25)"}
+     [:tspan {:x -19.865 :y -4
+              :font-size 13 :font-family "Helvetica-Bold"}
+      "Actual"]
+     [:tspan {:x -34.312 :y 12
+              :font-size 13 :font-family "Helvetica-Bold"}
+      "abundance"]]
+    ;; sample 1 observed abundance label
+    [:text {:transform "matrix(1, 0, 0, 1, 228, 437.25)"}
+     [:tspan {:x -29.986 :y -4
+              :font-size 13 :font-family "Helvetica-Bold"}
+      "Observed"]
+     [:tspan {:x -34.312 :y 12
+              :font-size 13 :font-family "Helvetica-Bold"}
+      "abundance"]]]])
+
+(defn sample-2-labels []
+  [:g
+   ;; sample 2 label
+   [:text {:transform "matrix(1, 0, 0, 1, 456, 490.75)"}
+    [:tspan {:x -79.04 :y 12.5
+             :font-size 36 :font-family "Helvetica-Bold"}
+     "Sample 2"]]
+   [:g
+    ;; sample 2 actual abundance label
+    [:text {:transform "matrix(1, 0, 0, 1, 396, 437.25)"}
+     [:tspan {:x -19.865 :y -4
+              :font-size 13 :font-family "Helvetica-Bold"}
+      "Actual"]
+     [:tspan {:x -34.312 :y 12
+              :font-size 13 :font-family "Helvetica-Bold"}
+      "abundance"]]
+    ;; sample 2 observed abundance label
+    [:text {:transform "matrix(1, 0, 0, 1, 516, 437.25)"}
+     [:tspan {:x -29.986 :y -4
+              :font-size 13 :font-family "Helvetica-Bold"}
+      "Observed"]
+     [:tspan {:x -34.312 :y 12
+              :font-size 13 :font-family "Helvetica-Bold"}
+      "abundance"]]]])
 
 (defn bar-charts
   "Both arguments are atoms."
@@ -162,7 +213,10 @@
         observed-rect-coords
         (map calc-rect-coords observed-rel-abund-by-sample)]
     [:svg {:width svg-width :height svg-height}
-     (map rabund-bar (range 4) (interleave actual-rect-coords observed-rect-coords))]))
+     [:g
+      (map rabund-bar (range 4) (interleave actual-rect-coords observed-rect-coords))]
+     [sample-1-labels]
+     [sample-2-labels]]))
 
 (defn bias-table-header []
   [:thead
@@ -186,6 +240,8 @@
                                              (range 2 21)))))
 (def bias-slider-min 0)
 (def bias-slider-max (count bias-slider-vals))
+(def input-focus-bg-color "#dddddd")
+(def input-blur-bg-color "")
 
 (defn parse-event [event]
   (let [val (check-NaN event)]
@@ -200,6 +256,12 @@
     (and (< val 1) (> val 0)) (- (/ 1 val))
     :else 0))
 
+(defn on-focus-change-bg [event]
+  (set! (.. event -target -style -background)
+        input-focus-bg-color))
+
+
+
 (defn bias-table-body
   "Assumes all OTUs have equal number of steps."
   []
@@ -213,20 +275,24 @@
         (for [step-idx (range num-protocol-steps)]
           ^{:key (str "step-" step-idx)}
           [:td
-           [:input {:type "range"
-                    :min bias-slider-min
-                    :max bias-slider-max
-                    :value (get-in @protocol-bias
-                                   [otu-idx step-idx])
-                    :on-change (fn [event]
-                                 (let [idx (event-val event)
-                                       bias-val (get bias-slider-vals idx 0)]
-                                   (swap! protocol-bias
-                                          assoc-in
-                                          [otu-idx step-idx]
-                                          bias-val)))}]
-           (gstring/format "%+.2fx" (get-in @protocol-bias [otu-idx step-idx]))]))
-       [:td (gstring/format "%+.2fx" (reduce * (get @protocol-bias otu-idx)))]]))])
+           [:input {:type "text"
+                    :defaultValue (get-in @protocol-bias
+                                          [otu-idx step-idx])
+                    :on-focus on-focus-change-bg
+                    :on-key-down (fn [event]
+                                   (if (= (.-key event) "Enter")
+                                     (.. event -target blur)))
+                    :on-blur (fn [event]
+                               (let [val (check-NaN event)]
+                                 (set! (.. event -target -style -background)
+                                       input-blur-bg-color)
+                                 ;; also set the input value to this thing too...
+                                 (set! (.. event -target -value) val)
+                                 (swap! protocol-bias
+                                        assoc-in
+                                        [otu-idx step-idx]
+                                        val)))}]]))
+       [:td (gstring/format "%.2fx" (reduce * (get @protocol-bias otu-idx)))]]))])
 
 (defn bias-table []
   [:table
@@ -256,13 +322,20 @@
           [:td
            (if (= :editable editable)
              [:input {:type "text"
-                      :value (get-in @counts [otu-idx sample-idx])
-                      :on-change (fn [event]
-                                   (let [val (check-NaN event)]
-                                     (swap! counts
-                                            assoc-in
-                                            [otu-idx sample-idx]
-                                            val)))}]
+                      :defaultValue (get-in @counts [otu-idx sample-idx])
+                      :on-focus on-focus-change-bg
+                      :on-key-down (fn [event]
+                                     (if (= (.-key event) "Enter")
+                                       (.. event -target blur)))
+                      :on-blur (fn [event]
+                                 (let [val (Math/round (check-NaN event))]
+                                   (set! (.. event -target -style -background)
+                                         input-blur-bg-color)
+                                   (set! (.. event -target -value) val)
+                                   (swap! counts
+                                          assoc-in
+                                          [otu-idx sample-idx]
+                                          val)))}]
              (get-in @counts [otu-idx sample-idx]))]))]))])
 
 
