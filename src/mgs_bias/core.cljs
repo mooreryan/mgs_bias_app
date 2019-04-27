@@ -30,40 +30,38 @@
                      :bioinformatics-bais])
 
 ;; row i is OTU i, col j is sample j
-(def actual-otu-counts
+(def otu-counts
   (r/atom [[1 15] ; OTU 1
            [1  1] ; OTU 2
            [1  4] ; OTU 3
            ]))
 
-(def observed-otu-counts
-  (r/atom nil))
-
 ;; row i is OTU i, col j is protocol step j
-(def protocol-otu-bias-per-step
+(def protocol-bias
   (r/atom [[ 1 1 1    1]   ; OTU 1
            [ 4 6 0.5  1.5] ; OTU 2
            [15 2 0.25 0.8] ; OTU 3
            ]))
 
-(def num-otus 3)
-(def num-samples 2)
+(def num-otus (count @otu-counts))
+(def num-samples (count (first @otu-counts)))
+(def num-protocol-steps (count protocol-steps))
 
 ;; (def protocol-otu-bias-total
 ;;   (r/atom nil))
 
 (defn total-bias
-  "Returns a vec with the total bias for each OTU."
+  "Returns a vec with the total bias for each OTU.  Deref the atoms first."
   [protocol-bias]
   (vec (map #(reduce * %) protocol-bias)))
 
 (defn observed-counts
-  "Returns vec of vecs to match the input data format."
+  "Returns vec of vecs to match the input data format.  Deref the atoms first."
   [actual-counts protocol-bias]
   (vec (map (fn [[otu-bias per-sample-counts]]
-                (vec (map #(* otu-bias %) per-sample-counts)))
-              (zipmap (total-bias protocol-bias)
-                      actual-counts))))
+              (vec (map #(* otu-bias %) per-sample-counts)))
+            (zipmap (total-bias protocol-bias)
+                    actual-counts))))
 
 ;;;; Utils
 
@@ -114,11 +112,15 @@
                        y (:start coords)
                        width 50
                        height (:height coords)]
-                   ^{:key (str x "-" y)}
+                   ^{:key (str i "-" x "-" y)}
                    [:rect {:x x :y y
                            :width width :height height
                            :fill (otu-colors i)}]))
                rect-coords))
+
+
+
+;;;; Components
 
 (defn bar-charts
   "Both arguments are atoms."
@@ -141,27 +143,6 @@
     [:svg {:width 500 :height 500}
      (map rabund-bar (range num-samples) all-rect-coords)]))
 
-
-
-#_(defn bar-charts [otu-counts otu-bias-per-step]
-  ;; Make sure any existing svg has been removed
-  (-> js/d3
-      (.select (str "#" html-id-composition-charts-svg))
-      .remove)
-  (let [svg (-> js/d3
-                (.select (str "#" html-id-composition-charts))
-                (.append "svg")
-                (.attr "id" html-id-composition-charts-svg)
-                (.attr "width" 500)
-                (.attr "height" 500))]
-    (-> svg
-        (.append "circle")
-        (.attr "r" 10)
-        (.attr "cx" 100)
-        (.attr "cy" 100))))
-
-;;;; Components
-
 (defn bias-table-header []
   [:thead
    [:tr
@@ -180,37 +161,32 @@
 
 (defn bias-table-body
   "Assumes all OTUs have equal number of steps."
-  [otu-bias-per-step]
-  (let [num-otus (count @otu-bias-per-step)
-        num-steps (count (first @otu-bias-per-step))]
-    [:tbody
-     (doall
-      (for [otu-idx (range num-otus)]
-        ^{:key (str "otu-" otu-idx)}
-        [:tr
-         [:td (str "otu-" (inc otu-idx))]
-         (doall
-          (for [step-idx (range num-steps)]
-            ^{:key (str "step-" step-idx)}
-            [:td
-             [:input {:type "text"
-                      :value (get-in @otu-bias-per-step
-                                     [otu-idx step-idx])
-                      :on-change (fn [event]
-                                   (let [val (check-NaN event)]
-                                     (swap! otu-bias-per-step
-                                            assoc-in
-                                            [otu-idx step-idx]
-                                            val)
-                                     (reset! observed-otu-counts
-                                             (observed-counts @actual-otu-counts
-                                                              @protocol-otu-bias-per-step))))}]]))
-         [:td (reduce * (get @otu-bias-per-step otu-idx))]]))]))
+  []
+  [:tbody
+   (doall
+    (for [otu-idx (range num-otus)]
+      ^{:key (str "otu-" otu-idx)}
+      [:tr
+       [:td (str "otu-" (inc otu-idx))]
+       (doall
+        (for [step-idx (range num-protocol-steps)]
+          ^{:key (str "step-" step-idx)}
+          [:td
+           [:input {:type "text"
+                    :value (get-in @protocol-bias
+                                   [otu-idx step-idx])
+                    :on-change (fn [event]
+                                 (let [val (check-NaN event)]
+                                   (swap! protocol-bias
+                                          assoc-in
+                                          [otu-idx step-idx]
+                                          val)))}]]))
+       [:td (reduce * (get @protocol-bias otu-idx))]]))])
 
-(defn bias-table [data]
+(defn bias-table []
   [:table
    [bias-table-header]
-   [bias-table-body data]])
+   [bias-table-body]])
 
 (defn count-table-header []
   [:thead
@@ -219,44 +195,105 @@
     [:th "Sample 1"]
     [:th "sample 2"]]])
 
-;; parseFloat -> need to handle NaN
-(defn actual-count-table-body
-  [otu-counts]
-  (let [num-otus (count @otu-counts)
-        num-samples (count (first @otu-counts))]
-    [:tbody
-     (doall
-      (for [otu-idx (range num-otus)]
-        ^{:key (str "otu-" otu-idx)}
-        [:tr
-         [:td (str "otu-" (inc otu-idx))]
-         (doall
-          (for [sample-idx (range num-samples)]
-            ^{:key (str "sample-" sample-idx)}
-            [:td
+(defn count-table-body
+  "editable: flag to specify whether table data cells should be inputs
+  or not. "
+  [counts editable]
+  [:tbody
+   (doall
+    (for [otu-idx (range num-otus)]
+      ^{:key (str "otu-" otu-idx)}
+      [:tr
+       [:td (str "otu-" (inc otu-idx))]
+       (doall
+        (for [sample-idx (range num-samples)]
+          ^{:key (str "otu-sample-" otu-idx "-" sample-idx)}
+          [:td
+           (if (= :editable editable)
              [:input {:type "text"
-                      :value (get-in @otu-counts [otu-idx sample-idx])
+                      :value (get-in @counts [otu-idx sample-idx])
                       :on-change (fn [event]
                                    (let [val (check-NaN event)]
-                                     (swap! otu-counts
+                                     (swap! counts
                                             assoc-in
                                             [otu-idx sample-idx]
-                                            val)
-                                     (reset! observed-otu-counts
-                                             (observed-counts @actual-otu-counts
-                                                              @protocol-otu-bias-per-step))))}]]))]))]))
+                                            val)))}]
+             (get-in @counts [otu-idx sample-idx]))]))]))])
 
-(defn actual-count-table [data]
+
+
+(defn actual-count-table []
   [:table
    [count-table-header]
-   [actual-count-table-body data]])
+   [count-table-body otu-counts :editable]])
+
+(defn observed-count-table []
+  [:table
+   [count-table-header]
+   [count-table-body (r/atom
+                      (observed-counts @otu-counts
+                                       @protocol-bias))
+    :not-editable]])
+
+
+;;;; Rendering
+
+(r/render [bias-table protocol-bias]
+          (.getElementById js/document html-id-bias-table))
+
+(r/render [actual-count-table]
+          (.getElementById js/document html-id-otu-table-actual-counts))
+
+(r/render [observed-count-table]
+          (.getElementById js/document
+                           html-id-otu-table-observed-counts))
+
+(r/render [bar-charts otu-counts protocol-bias]
+          (.getElementById js/document html-id-composition-charts))
+
+;; (r/render [update-charts]
+;;           (.getElementById js/document html-id-update-charts-button))
+
+
+;;;; Unused
+
+#_(defn actual-count-table-body
+    [otu-counts]
+    (let [num-otus (count @otu-counts)
+          num-samples (count (first @otu-counts))]
+      [:tbody
+       (doall
+        (for [otu-idx (range num-otus)]
+          ^{:key (str "otu-" otu-idx)}
+          [:tr
+           [:td (str "otu-" (inc otu-idx))]
+           (doall
+            (for [sample-idx (range num-samples)]
+              ^{:key (str "sample-" sample-idx)}
+              [:td
+               [:input {:type "text"
+                        :value (get-in @otu-counts [otu-idx sample-idx])
+                        :on-change (fn [event]
+                                     (let [val (check-NaN event)]
+                                       (swap! otu-counts
+                                              assoc-in
+                                              [otu-idx sample-idx]
+                                              val)))}]]))]))]))
+
+#_(defn update-charts []
+    [:input {:type "button"
+             :value "Update charts!"
+             :on-click (fn [e]
+                         (bar-charts otu-counts
+                                     protocol-bias))}])
+
 
 #_(defn observed-count-table-body
   "Assumes the data is all in the proper shape."
-  [otu-counts otu-bias-per-step]
+  [otu-counts]
   (let [num-otus (count @otu-counts)
         num-samples (count (first @otu-counts))
-        bias (total-bias @otu-bias-per-step)]
+        bias (total-bias @protocol-bias)]
     [:tbody
      (doall
       (for [otu-idx (range num-otus)]
@@ -268,53 +305,3 @@
             (let [count (get-in @otu-counts [otu-idx sample-idx])]
               ^{:key (str "sample-" sample-idx)}
               [:td (* count (get bias otu-idx))])))]))]))
-
-(defn observed-count-table-body
-  "Assumes the data is all in the proper shape."
-  [otu-counts]
-  [:tbody
-     (doall
-      (for [otu-idx (range num-otus)]
-        ^{:key (str "otu-" otu-idx)}
-        [:tr
-         [:td (str "otu-" (inc otu-idx))]
-         (doall
-          (for [sample-idx (range num-samples)]
-            (let [count (get-in @otu-counts [otu-idx sample-idx])]
-              ^{:key (str "sample-" sample-idx)}
-              [:td count])))]))])
-
-(defn observed-count-table [otu-counts otu-bias-per-step]
-  [:table
-   [count-table-header]
-   [observed-count-table-body otu-counts otu-bias-per-step]])
-
-#_(defn update-charts []
-  [:input {:type "button"
-           :value "Update charts!"
-           :on-click (fn [e]
-                       (bar-charts actual-otu-counts
-                                        protocol-otu-bias-per-step))}])
-
-;;;; Rendering
-
-(reset! observed-otu-counts
-        (observed-counts @actual-otu-counts
-                         @protocol-otu-bias-per-step))
-
-(r/render [bias-table protocol-otu-bias-per-step]
-          (.getElementById js/document html-id-bias-table))
-
-(r/render [actual-count-table actual-otu-counts]
-          (.getElementById js/document html-id-otu-table-actual-counts))
-
-(r/render [observed-count-table
-           observed-otu-counts]
-          (.getElementById js/document
-                           html-id-otu-table-observed-counts))
-
-(r/render [bar-charts actual-otu-counts observed-otu-counts]
-          (.getElementById js/document html-id-composition-charts))
-
-;; (r/render [update-charts]
-;;           (.getElementById js/document html-id-update-charts-button))
