@@ -120,8 +120,7 @@
   "Make a relative abundance bar for a single sample."
   [sample-idx rect-coords]
   (let [start-xy (get rabund-bar-xy-start sample-idx {:x 0 :y 0})]
-    [:g
-     (map-indexed (fn [i coords]
+    (map-indexed (fn [i coords]
                     (let [x (:x start-xy)
                           ;; offset the y value by the default y start
                           y (+ (:start coords) (:y start-xy))
@@ -131,7 +130,7 @@
                       [:rect {:x x :y y
                               :width width :height height
                               :fill (otu-colors i)}]))
-                  rect-coords)]))
+                  rect-coords)))
 
 ;;;; Components
 
@@ -140,24 +139,24 @@
   [:g
    [:text {:transform "matrix(1, 0, 0, 1, 168, 490.75)"}
     [:tspan {:x -79.04 :y 12.5
-             :font-size 36 :font-family "Helvetica-Bold"}
+             :font-size 36}
      "Sample 1"]]
    [:g
     ;; sample 1 actual abundance label
     [:text {:transform "matrix(1, 0, 0, 1, 108, 437.25)"}
      [:tspan {:x -19.865 :y -4
-              :font-size 13 :font-family "Helvetica-Bold"}
+              :font-size 13}
       "Actual"]
      [:tspan {:x -34.312 :y 12
-              :font-size 13 :font-family "Helvetica-Bold"}
+              :font-size 13}
       "abundance"]]
     ;; sample 1 observed abundance label
     [:text {:transform "matrix(1, 0, 0, 1, 228, 437.25)"}
      [:tspan {:x -29.986 :y -4
-              :font-size 13 :font-family "Helvetica-Bold"}
+              :font-size 13}
       "Observed"]
      [:tspan {:x -34.312 :y 12
-              :font-size 13 :font-family "Helvetica-Bold"}
+              :font-size 13}
       "abundance"]]]])
 
 (defn sample-2-labels []
@@ -165,24 +164,24 @@
    ;; sample 2 label
    [:text {:transform "matrix(1, 0, 0, 1, 456, 490.75)"}
     [:tspan {:x -79.04 :y 12.5
-             :font-size 36 :font-family "Helvetica-Bold"}
+             :font-size 36}
      "Sample 2"]]
    [:g
     ;; sample 2 actual abundance label
     [:text {:transform "matrix(1, 0, 0, 1, 396, 437.25)"}
      [:tspan {:x -19.865 :y -4
-              :font-size 13 :font-family "Helvetica-Bold"}
+              :font-size 13}
       "Actual"]
      [:tspan {:x -34.312 :y 12
-              :font-size 13 :font-family "Helvetica-Bold"}
+              :font-size 13}
       "abundance"]]
     ;; sample 2 observed abundance label
     [:text {:transform "matrix(1, 0, 0, 1, 516, 437.25)"}
      [:tspan {:x -29.986 :y -4
-              :font-size 13 :font-family "Helvetica-Bold"}
+              :font-size 13}
       "Observed"]
      [:tspan {:x -34.312 :y 12
-              :font-size 13 :font-family "Helvetica-Bold"}
+              :font-size 13}
       "abundance"]]]])
 
 (defn bar-charts
@@ -253,7 +252,7 @@
    (doall
     (for [otu-idx (range num-otus)]
       ^{:key (str "otu-" otu-idx)}
-      [:tr
+      [:tr {:style {:color (otu-colors otu-idx)}}
        [:td (str "OTU_" (inc otu-idx))]
        (doall
         (for [step-idx (range num-protocol-steps)]
@@ -298,7 +297,7 @@
    (doall
     (for [otu-idx (range num-otus)]
       ^{:key (str "otu-" otu-idx)}
-      [:tr
+      [:tr {:style {:color (otu-colors otu-idx)}}
        [:td (str "OTU_" (inc otu-idx))]
        (doall
         (for [sample-idx (range num-samples)]
