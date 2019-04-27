@@ -211,9 +211,9 @@
     [:th "Bioinformatics bias"]
     [:th "Total bias"]]])
 
-(defn check-NaN [event]
+(defn check-user-input [event]
   (let [val (js/parseFloat (event-val event))]
-    (if (js/isNaN val)
+    (if (or (js/isNaN val) (< val 0))
       0
       val)))
 
@@ -227,7 +227,7 @@
 (def input-blur-bg-color "")
 
 (defn parse-event [event]
-  (let [val (check-NaN event)]
+  (let [val (check-user-input event)]
     (cond
       (< val 0) (/ 1 (Math/abs val))
       (> val 0) val
@@ -266,7 +266,7 @@
                                    (if (= (.-key event) "Enter")
                                      (.. event -target blur)))
                     :on-blur (fn [event]
-                               (let [val (check-NaN event)]
+                               (let [val (check-user-input event)]
                                  (set! (.. event -target -style -background)
                                        input-blur-bg-color)
                                  ;; also set the input value to this thing too...
@@ -311,7 +311,7 @@
                                      (if (= (.-key event) "Enter")
                                        (.. event -target blur)))
                       :on-blur (fn [event]
-                                 (let [val (Math/round (check-NaN event))]
+                                 (let [val (Math/round (check-user-input event))]
                                    (set! (.. event -target -style -background)
                                          input-blur-bg-color)
                                    (set! (.. event -target -value) val)
