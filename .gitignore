@@ -2,3 +2,6 @@ target
 .cpcache
 .figwheel-main.edn
 .rebel_readline_history
+
+bar_charts.svg
+bar_charts.idraw
