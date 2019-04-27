@@ -319,7 +319,7 @@
                                           assoc-in
                                           [otu-idx sample-idx]
                                           val)))}]
-             (get-in @counts [otu-idx sample-idx]))]))]))])
+             (Math/round (get-in @counts [otu-idx sample-idx])))]))]))])
 
 
 
