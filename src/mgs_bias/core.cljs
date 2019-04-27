@@ -47,6 +47,21 @@
 (def num-samples (count (first @otu-counts)))
 (def num-protocol-steps (count protocol-steps))
 
+(def total-bar-height 350)
+(def otu-colors ["#004488" "#DDAA33" "#BB5566"])
+
+;; Top left coord for each of the relative abundance bars.
+(def rabund-bar-xy-start
+  [{:x  72 :y 36.75} ; sample 1 actual
+   {:x 192 :y 36.75} ; sample 1 observed
+   {:x 360 :y 36.75} ; sample 2 actual
+   {:x 480 :y 36.75} ; sample 2 observed
+   ])
+
+(def rabund-bar-width 72)
+(def svg-width 625)
+(def svg-height 550)
+
 ;; (def protocol-otu-bias-total
 ;;   (r/atom nil))
 
@@ -58,7 +73,21 @@
 (defn observed-counts
   "Returns vec of vecs to match the input data format.  Deref the atoms first."
   [actual-counts protocol-bias]
-  (vec (map (fn [[otu-bias per-sample-counts]]
+  (print "actual-counts")
+  (pp/pprint actual-counts)
+
+  (print "observed-counts")
+  (pp/pprint (vec (map (fn [[otu-bias per-sample-counts]]
+                         (vec (map #(* otu-bias %) per-sample-counts)))
+                       (zipmap (total-bias protocol-bias)
+                               actual-counts))))
+
+  (vec (map (fn [bias counts]
+              (vec (map #(* bias %) counts)))
+            (total-bias protocol-bias)
+            actual-counts))
+
+  #_(vec (map (fn [[otu-bias per-sample-counts]]
               (vec (map #(* otu-bias %) per-sample-counts)))
             (zipmap (total-bias protocol-bias)
                     actual-counts))))
@@ -89,7 +118,6 @@
         samples (transpose counts)]
     (transpose (map rabund samples))))
 
-(def total-bar-height 350)
 (defn calc-rect-coords
   "rel-abunds is a vector of relative abundances for all the OTUs for
   a single sample.  Some OTUs could have 0 relative abundance.  All
@@ -104,44 +132,37 @@
                       :height n}))
                  heights)))
 
-(def otu-colors ["#004488" "#DDAA33" "#BB5566"])
-
-(defn rabund-bar [sample-idx rect-coords]
-  (map-indexed (fn [i coords]
-                 (let [x (* 100 (inc sample-idx))
-                       y (:start coords)
-                       width 50
-                       height (:height coords)]
-                   ^{:key (str i "-" x "-" y)}
-                   [:rect {:x x :y y
-                           :width width :height height
-                           :fill (otu-colors i)}]))
-               rect-coords))
-
-
+(defn rabund-bar
+  "Make a relative abundance bar for a single sample."
+  [sample-idx rect-coords]
+  (let [start-xy (get rabund-bar-xy-start sample-idx {:x 0 :y 0})]
+    (map-indexed (fn [i coords]
+                   (let [x (:x start-xy)
+                         ;; offset the y value by the default y start
+                         y (+ (:start coords) (:y start-xy))
+                         width rabund-bar-width
+                         height (:height coords)]
+                     ^{:key (str i "-" x "-" y)}
+                     [:rect {:x x :y y
+                             :width width :height height
+                             :fill (otu-colors i)}]))
+                 rect-coords)))
 
 ;;;; Components
 
 (defn bar-charts
   "Both arguments are atoms."
   [otu-counts otu-bias-per-step]
-  (let [rel-abund-by-sample (transpose (calc-rel-abund @otu-counts))
-        all-rect-coords (map calc-rect-coords rel-abund-by-sample)]
-
-    (print "@otu-counts")
-    (pp/pprint @otu-counts)
-
-    (print "(calc-rel-abund @otu-counts)")
-    (pp/pprint (calc-rel-abund @otu-counts))
-
-    (print "rel-abund-by-sample")
-    (pp/pprint rel-abund-by-sample)
-
-    (print "all-rect-coords")
-    (pp/pprint all-rect-coords)
-    ;; (print (map rabund-bar (range num-samples) all-rect-coords))
-    [:svg {:width 500 :height 500}
-     (map rabund-bar (range num-samples) all-rect-coords)]))
+  (let [actual-rel-abund-by-sample
+        (transpose (calc-rel-abund @otu-counts))
+        actual-rect-coords
+        (map calc-rect-coords actual-rel-abund-by-sample)
+        observed-rel-abund-by-sample
+        (transpose (calc-rel-abund (observed-counts @otu-counts @protocol-bias)))
+        observed-rect-coords
+        (map calc-rect-coords observed-rel-abund-by-sample)]
+    [:svg {:width svg-width :height svg-height}
+     (map rabund-bar (range 4) (interleave actual-rect-coords observed-rect-coords))]))
 
 (defn bias-table-header []
   [:thead
@@ -159,6 +180,26 @@
       0
       val)))
 
+(def bias-slider-vals (into [0]
+                            (flatten (vector (map #(/ 1 %)
+                                                  (reverse (range 1 21)))
+                                             (range 2 21)))))
+(def bias-slider-min 0)
+(def bias-slider-max (count bias-slider-vals))
+
+(defn parse-event [event]
+  (let [val (check-NaN event)]
+    (cond
+      (< val 0) (/ 1 (Math/abs val))
+      (> val 0) val
+      :else 0)))
+
+(defn parse-bias-val [val]
+  (cond
+    (>= val 1) val
+    (and (< val 1) (> val 0)) (- (/ 1 val))
+    :else 0))
+
 (defn bias-table-body
   "Assumes all OTUs have equal number of steps."
   []
@@ -172,16 +213,20 @@
         (for [step-idx (range num-protocol-steps)]
           ^{:key (str "step-" step-idx)}
           [:td
-           [:input {:type "text"
+           [:input {:type "range"
+                    :min bias-slider-min
+                    :max bias-slider-max
                     :value (get-in @protocol-bias
                                    [otu-idx step-idx])
                     :on-change (fn [event]
-                                 (let [val (check-NaN event)]
+                                 (let [idx (event-val event)
+                                       bias-val (get bias-slider-vals idx 0)]
                                    (swap! protocol-bias
                                           assoc-in
                                           [otu-idx step-idx]
-                                          val)))}]]))
-       [:td (reduce * (get @protocol-bias otu-idx))]]))])
+                                          bias-val)))}]
+           (gstring/format "%+.2fx" (get-in @protocol-bias [otu-idx step-idx]))]))
+       [:td (gstring/format "%+.2fx" (reduce * (get @protocol-bias otu-idx)))]]))])
 
 (defn bias-table []
   [:table
