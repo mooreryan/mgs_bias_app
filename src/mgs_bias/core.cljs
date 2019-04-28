@@ -303,7 +303,7 @@
 
 (defn check-user-input [event]
   (let [val (js/parseFloat (event-val event))]
-    (if (or (js/isNaN val) (< val 1))
+    (if (or (js/isNaN val) (< val 0))
       0
       val)))
 
