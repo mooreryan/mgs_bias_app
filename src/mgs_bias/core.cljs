@@ -14,9 +14,62 @@
 (def html-id-otu-table-observed-counts "mgs-bias-otu-table-observed-counts")
 (def html-id-composition-charts "mgs-bias-composition-charts")
 (def html-id-composition-charts-svg "mgs-bias-composition-charts-svg")
-(def html-id-update-charts-button "mgs-bias-update-charts")
+(def html-id-beta-table "mgs-bias-beta-table")
 
 (def config (atom {:num-otus 3}))
+
+;;;; Statistics
+
+(defn rabund [v]
+  (let [total (apply + v)]
+    (vec  (map #(/ % total) v))))
+
+(defn aitchison-dist
+  "Input is OTU counts by sample (two 1D vecs).  Should be the same length."
+  [xs ys]
+  (assert (= (count xs) (count ys)))
+  ;; Shadow original vars with their relative abundance.  If inputs
+  ;; are already rel abundance this won't change the answer, but will
+  ;; waste some cycles.
+  (let [xs (rabund xs)
+        ys (rabund ys)]
+    (let [size (count xs)]
+      (* (/ 1
+            (* 2 size))
+         (apply +
+                (for [i (range size)
+                      j (range size)]
+                  (Math/pow (- (Math/log (/ (xs i)
+                                            (xs j)))
+                               (Math/log (/ (ys i)
+                                            (ys j))))
+                            2)))))))
+
+(defn euclidean-dist
+  "Same input as adist"
+  [xs ys]
+  (assert (= (count xs) (count ys)))
+  (Math/sqrt
+   (apply +
+          (map-indexed (fn [i x]
+                         (let [y (ys i)]
+                           (Math/pow (- x y) 2)))
+                       xs))))
+
+(defn bray-curtis-diss
+  "Same input as adist.  xi is the count of OTU i in sample x."
+  [xs ys]
+  (assert (= (count xs) (count ys)))
+  (- 1
+     (/ (* 2
+           (apply + (map-indexed (fn [i x]
+                                   (let [y (ys i)]
+                                     (if (< x y)
+                                       x
+                                       y)))
+                                 xs)))
+        (+ (apply + xs)
+           (apply + ys)))))
 
 ;;;; Data
 
@@ -94,13 +147,13 @@
   count in sample j), return a vec of relative abundances (entry ij is
   otu i relative abundance in sample j)."
   [counts]
-  (defn rabund [vec]
+  (defn rabund2 [vec]
     (let [total (apply + vec)]
       (map #(/ % total) vec)))
 
   (let [;; samples => 2d vec, rows are samples, cols are OTUs
         samples (transpose counts)]
-    (transpose (map rabund samples))))
+    (transpose (map rabund2 samples))))
 
 (defn calc-rect-coords
   "rel-abunds is a vector of relative abundances for all the OTUs for
@@ -211,9 +264,21 @@
     [:th "Bioinformatics bias"]
     [:th "Total bias"]]])
 
+#_(defn check-user-bias-input [event]
+  (let [val (js/parseFloat (event-val event))]
+    (if (or (js/isNaN val) (<= val 0))
+      1
+      val)))
+
+#_(defn check-user-count-input [event]
+  (let [val (js/parseFloat (event-val event))]
+    (if (or (js/isNaN val) (< val 1))
+      1
+      (Math/round val))))
+
 (defn check-user-input [event]
   (let [val (js/parseFloat (event-val event))]
-    (if (or (js/isNaN val) (< val 0))
+    (if (or (js/isNaN val) (< val 1))
       0
       val)))
 
@@ -226,24 +291,9 @@
 (def input-focus-bg-color "#ecd6e6")
 (def input-blur-bg-color "")
 
-(defn parse-event [event]
-  (let [val (check-user-input event)]
-    (cond
-      (< val 0) (/ 1 (Math/abs val))
-      (> val 0) val
-      :else 0)))
-
-(defn parse-bias-val [val]
-  (cond
-    (>= val 1) val
-    (and (< val 1) (> val 0)) (- (/ 1 val))
-    :else 0))
-
 (defn on-focus-change-bg [event]
   (set! (.. event -target -style -background)
         input-focus-bg-color))
-
-
 
 (defn bias-table-body
   "Assumes all OTUs have equal number of steps."
@@ -336,6 +386,38 @@
                                        @protocol-bias))
     :not-editable]])
 
+(defn beta-table [actual-counts observed-counts]
+  (let [sample-actual-counts (transpose actual-counts)
+        sample-observed-counts (transpose observed-counts)
+        s1-actual (first sample-actual-counts)
+        s2-actual (last sample-actual-counts)
+        s1-observed (first sample-observed-counts)
+        s2-observed (last sample-observed-counts)
+        actual-euclidean (euclidean-dist s1-actual s2-actual)
+        actual-bray-curtis (bray-curtis-diss s1-actual s2-actual)
+        actual-aitchison (aitchison-dist s1-actual s2-actual)
+        observed-euclidean (euclidean-dist s1-observed s2-observed)
+        observed-bray-curtis (bray-curtis-diss s1-observed s2-observed)
+        observed-aitchison (aitchison-dist s1-observed s2-observed)]
+    [:table
+     [:thead
+      [:tr
+       [:th "S1 vs S2"]
+       [:th "Euclidean"]
+       [:th "Bray-Curtis"]
+       [:th "Aitchison"]]]
+     [:tbody
+      [:tr
+       [:td "Actual"]
+       [:td (gstring/format "%.2f" actual-euclidean)]
+       [:td (gstring/format "%.2f" actual-bray-curtis)]
+       [:td (gstring/format "%.2f" actual-aitchison)]]
+      [:tr
+       [:td "Observed"]
+       [:td (gstring/format "%.2f" observed-euclidean)]
+       [:td (gstring/format "%.2f" observed-bray-curtis)]
+       [:td (gstring/format "%.2f" observed-aitchison)]]]]))
+
 (defn app-scaffold []
   [:div
    [:div {:class "row"}
@@ -348,7 +430,10 @@
    [:div {:class "row"}
     [:div {:class "five columns"}
      [:h3 "Observed counts"]
-     [:div {:id "mgs-bias-otu-table-observed-counts"}]]
+     [:div {:id "mgs-bias-otu-table-observed-counts"}]
+     [:h3 "Sample distance"]
+     [beta-table @otu-counts (observed-counts @otu-counts
+                                              @protocol-bias)]]
     [:div {:class "seven columns"}
      [:div
       [:h3 "Composition charts"]
