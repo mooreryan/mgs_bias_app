@@ -56,7 +56,7 @@
                            (Math/pow (- x y) 2)))
                        xs))))
 
-(defn bray-curtis-diss
+(defn bray-curtis-dist
   "Same input as adist.  xi is the count of OTU i in sample x."
   [xs ys]
   (assert (= (count xs) (count ys)))
@@ -103,10 +103,10 @@
 
 ;; Top left coord for each of the relative abundance bars.
 (def rabund-bar-xy-start
-  [{:x  72 :y 36.75} ; sample 1 actual
-   {:x 192 :y 36.75} ; sample 1 observed
-   {:x 360 :y 36.75} ; sample 2 actual
-   {:x 480 :y 36.75} ; sample 2 observed
+  [{:x  96 :y 36.75} ; sample 1 actual
+   {:x 216 :y 36.75} ; sample 1 observed
+   {:x 384 :y 36.75} ; sample 2 actual
+   {:x 504 :y 36.75} ; sample 2 observed
    ])
 
 (def rabund-bar-width 72)
@@ -190,13 +190,13 @@
 (defn sample-1-labels []
   ;; sample 1 label
   [:g
-   [:text {:transform "matrix(1, 0, 0, 1, 168, 490.75)"}
+   [:text {:transform "matrix(1, 0, 0, 1, 192, 490.75)"}
     [:tspan {:x -79.04 :y 12.5
              :font-size 36}
      "Sample 1"]]
    [:g
     ;; sample 1 actual abundance label
-    [:text {:transform "matrix(1, 0, 0, 1, 108, 437.25)"}
+    [:text {:transform "matrix(1, 0, 0, 1, 132, 437.25)"}
      [:tspan {:x -19.865 :y -4
               :font-size 13}
       "Actual"]
@@ -204,7 +204,7 @@
               :font-size 13}
       "abundance"]]
     ;; sample 1 observed abundance label
-    [:text {:transform "matrix(1, 0, 0, 1, 228, 437.25)"}
+    [:text {:transform "matrix(1, 0, 0, 1, 252, 437.25)"}
      [:tspan {:x -29.986 :y -4
               :font-size 13}
       "Observed"]
@@ -215,13 +215,13 @@
 (defn sample-2-labels []
   [:g
    ;; sample 2 label
-   [:text {:transform "matrix(1, 0, 0, 1, 456, 490.75)"}
+   [:text {:transform "matrix(1, 0, 0, 1, 480, 490.75)"}
     [:tspan {:x -79.04 :y 12.5
              :font-size 36}
      "Sample 2"]]
    [:g
     ;; sample 2 actual abundance label
-    [:text {:transform "matrix(1, 0, 0, 1, 396, 437.25)"}
+    [:text {:transform "matrix(1, 0, 0, 1, 420, 437.25)"}
      [:tspan {:x -19.865 :y -4
               :font-size 13}
       "Actual"]
@@ -229,13 +229,37 @@
               :font-size 13}
       "abundance"]]
     ;; sample 2 observed abundance label
-    [:text {:transform "matrix(1, 0, 0, 1, 516, 437.25)"}
+    [:text {:transform "matrix(1, 0, 0, 1, 540, 437.25)"}
      [:tspan {:x -29.986 :y -4
               :font-size 13}
       "Observed"]
      [:tspan {:x -34.312 :y 12
               :font-size 13}
       "abundance"]]]])
+
+(defn bar-chart-key []
+  [:g
+   ;; OTU blue block
+   [:rect {:x 5 :y 168
+           :width 23 :height 23
+           :fill (otu-colors 0)}]
+   ;; OTU yellow block
+   [:rect {:x 5 :y 204
+           :width 23 :height 23
+           :fill (otu-colors 1)}]
+   ;; OTU red block
+   [:rect {:x 5 :y 240
+           :width 23 :height 23
+           :fill (otu-colors 2)}]
+   ;; OTU blue text
+   [:text {:transform "matrix(1, 0, 0, 1, 52, 179.5)"}
+    [:tspan {:x -20 :y 4} "OTU_1"]]
+   ;; OTU yellow text
+   [:text {:transform "matrix(1, 0, 0, 1, 52, 216)"}
+    [:tspan {:x -20 :y 4} "OTU_2"]]
+   ;; OTU red text
+   [:text {:transform "matrix(1, 0, 0, 1, 52, 252)"}
+    [:tspan {:x -20 :y 4} "OTU_3"]]])
 
 (defn bar-charts
   "Both arguments are atoms."
@@ -252,7 +276,8 @@
      [:g
       (map rabund-bar (range 4) (interleave actual-rect-coords observed-rect-coords))]
      [sample-1-labels]
-     [sample-2-labels]]))
+     [sample-2-labels]
+     [bar-chart-key]]))
 
 (defn bias-table-header []
   [:thead
@@ -394,10 +419,10 @@
         s1-observed (first sample-observed-counts)
         s2-observed (last sample-observed-counts)
         actual-euclidean (euclidean-dist s1-actual s2-actual)
-        actual-bray-curtis (bray-curtis-diss s1-actual s2-actual)
+        actual-bray-curtis (bray-curtis-dist s1-actual s2-actual)
         actual-aitchison (aitchison-dist s1-actual s2-actual)
         observed-euclidean (euclidean-dist s1-observed s2-observed)
-        observed-bray-curtis (bray-curtis-diss s1-observed s2-observed)
+        observed-bray-curtis (bray-curtis-dist s1-observed s2-observed)
         observed-aitchison (aitchison-dist s1-observed s2-observed)]
     [:table
      [:thead
